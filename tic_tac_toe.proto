@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+service TicTacToe {
+  rpc StartGame (StartGameRequest) returns (StartGameResponse) {}
+  rpc SetSymbol (SetSymbolRequest) returns (SetSymbolResponse) {}
+  rpc ListBoard (ListBoardRequest) returns (ListBoardResponse) {}
+  rpc SetNodeTime (SetNodeTimeRequest) returns (SetNodeTimeResponse) {}
+  rpc SetTimeOut (SetTimeOutRequest) returns (SetTimeOutResponse) {}
+}
+
+message StartGameRequest {}
+message StartGameResponse {}
+
+message SetSymbolRequest {
+  int32 cell = 1;
+  string symbol = 2;
+}
+message SetSymbolResponse {}
+
+message ListBoardRequest {}
+message ListBoardResponse {
+  string board_state = 1;
+}
+
+message SetNodeTimeRequest {
+  string node_id = 1;
+  string time = 2;
+}
+message SetNodeTimeResponse {}
+
+message SetTimeOutRequest {
+  string target = 1;
+  int32 timeout_minutes = 2;
+}
+message SetTimeOutResponse {}
