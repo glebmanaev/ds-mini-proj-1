@@ -8,15 +8,19 @@ service TicTacToe {
   rpc SetTimeOut (SetTimeOutRequest) returns (SetTimeOutResponse) {}
 }
 
-message StartGameRequest {}
-message StartGameResponse {}
+message StartGameRequest {
+  int32 client_time = 1;
+}
+message StartGameResponse {
+  int32 synced_time = 1;
+}
 
 message SetSymbolRequest {
   int32 cell = 1;
   string symbol = 2;
 }
 message SetSymbolResponse {
-  string winner = 1;
+  int32 success = 1;
 }
 
 message ListBoardRequest {}
