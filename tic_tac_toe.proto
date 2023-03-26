@@ -15,7 +15,9 @@ message SetSymbolRequest {
   int32 cell = 1;
   string symbol = 2;
 }
-message SetSymbolResponse {}
+message SetSymbolResponse {
+  string winner = 1;
+}
 
 message ListBoardRequest {}
 message ListBoardResponse {

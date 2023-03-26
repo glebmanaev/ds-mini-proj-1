@@ -33,6 +33,10 @@ def main():
                 symbol = command[2]
                 response = stub.SetSymbol(tic_tac_toe_pb2.SetSymbolRequest(cell=cell, symbol=symbol))
                 print("Symbol set.")
+                if response.winner is not "":
+                    print(f"Winner/draw: {response.winner}")
+                    # Reset board
+                    stub.StartGame(tic_tac_toe_pb2.StartGameRequest())
 
             elif command[0].lower() == "list-board":
                 response = stub.ListBoard(tic_tac_toe_pb2.ListBoardRequest())
