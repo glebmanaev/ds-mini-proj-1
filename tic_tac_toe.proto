@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+service TicTacToe {
+  rpc SetSymbol (SetSymbolRequest) returns (SetSymbolResponse) {}
+  rpc ListBoard (ListBoardRequest) returns (ListBoardResponse) {}
+  rpc SetNodeTime (SetNodeTimeRequest) returns (SetNodeTimeResponse) {}
+  rpc SetTimeOut (SetTimeOutRequest) returns (SetTimeOutResponse) {}
+  rpc CheckTimeOut (CheckTimeOutRequest) returns (CheckTimeoutResponse) {}
+}
+
+message SetSymbolRequest {
+  int32 cell = 1;
+  string symbol = 2;
+  int32 node_id = 3;
+}
+message SetSymbolResponse {
+  int32 success = 1;
+}
+
+message ListBoardRequest {
+    int32 node_id = 1;
+}
+message ListBoardResponse {
+  repeated int32 board_state = 1;
+  int32 board_last_idx = 2;
+  int32 board_last_time = 3;
+}
+
+message SetNodeTimeRequest {
+  int32 node_id = 1;
+  int32 time = 2;
+}
+message SetNodeTimeResponse {
+    bool success = 1;
+}
+
+message SetTimeOutRequest {
+  int32 node_id = 1;
+  int32 timeout = 2;
+}
+message SetTimeOutResponse {
+  bool success = 1;
+}
+
+message CheckTimeOutRequest {}
+message CheckTimeoutResponse {
+  bool leader_dead = 1;
+}

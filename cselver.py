@@ -1,4 +1,5 @@
 import time
+import datetime
 from concurrent import futures
 import grpc
 import tic_tac_toe_pb2
@@ -20,6 +21,9 @@ class TicTacToeNode:
             else:
                 self.stubs.append(tic_tac_toe_pb2_grpc.TicTacToeStub(channel))
 
+    def register_interactions(self, node_id):
+        self.node_last_seen_at[node_id] = time.time() + self.client.time_correction
+
     def start_game(self):
         # Do Barclay time sync here
         # Do democracy here
@@ -28,7 +32,8 @@ class TicTacToeNode:
     def set_symbol(self, cell, symbol):
         # send to leader, it will check if it is correct and returns the success of the move
         while True:
-            response = self.stubs[self.leader].SetSymbol(tic_tac_toe_pb2.SetSymbolRequest(cell=cell, symbol=symbol))
+            response = self.stubs[self.leader].SetSymbol(tic_tac_toe_pb2.SetSymbolRequest(cell=cell, symbol=symbol, node_id=self.id))
+            self.register_interactions(self.leader)
             if not bool(response.success):
                 print("Cell already taken. Try again.")
                 command = input("\n> Set-symbol ").strip().split()
@@ -39,13 +44,21 @@ class TicTacToeNode:
         print("Symbol set.")
 
     def list_board(self):
-        return self.stubs[self.leader].ListBoard(tic_tac_toe_pb2.ListBoardRequest())
+        response =  self.stubs[self.leader].ListBoard(tic_tac_toe_pb2.ListBoardRequest(node_id=self.id))
+        self.register_interactions(self.leader)
+        board = response.board_state
+        timestamp = datetime.datetime.fromtimestamp(response.board_last_time).strftime('%H:%M:%S')
+        board[response.board_last_idx] = f"{board[response.board_last_idx]}: {timestamp}"
+        print("Board state: ", )
 
     def set_node_time(self, node_id, settime):
+        dt = datetime.combine(datetime.today(), datetime.strptime(settime, '%H:%M:%S').time())
+        settime = dt.timestamp() # could be a problem if the node is not in the same timezone
         if node_id == self.id:
             self.time = settime
         elif self.leader == self.id:
-            response = self.stubs[node_id].SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=node_id, time=settime))
+            response = self.stubs[node_id].SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=self.id, time=settime))
+            self.register_interactions(node_id)
             print(f"Node {node_id} time set to {settime}.")
         else:
             print("Only the leader can set the time of other nodes.")
@@ -53,11 +66,12 @@ class TicTacToeNode:
     def set_timeout(self, target, timeout_minutes):
         if self.leader == self.id:
             if target == "players":
-                self.timeout_player = timeout_minutes
+                self.timeout_player = timeout_minutes * 60
             else:
                 for i, stub in enumerate(self.stubs):
                     if i != self.id:
-                        stub.SetTimeOut(tic_tac_toe_pb2.SetTimeOutRequest(timeout=timeout_minutes))
+                        stub.SetTimeOut(tic_tac_toe_pb2.SetTimeOutRequest(timeout=timeout_minutes, node_id=self.id))
+                        self.register_interactions(i)
         else:
             print("Only the leader can set timeouts.")
     
@@ -68,6 +82,8 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
 
     def init_as_leader(self):
         self.board = [""] * 9
+        self.board_last_idx = None
+        self.board_last_time = None
 
     def register_interactions(self, node_id):
         self.client.node_last_seen_at[node_id] = time.time() + self.client.time_correction
@@ -97,6 +113,8 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
             self.register_interactions(request.node_id)
             return tic_tac_toe_pb2.SetSymbolResponse(success=0)
         self.board[request.cell - 1] = request.symbol
+        self.board_last_idx = request.cell - 1
+        self.board_last_time = time.time() + self.client.time_correction
         self.register_interactions(request.node_id) 
         
         winner = self.check_winner()
@@ -108,7 +126,7 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
     
     def ListBoard(self, request, context):
         self.register_interactions(request.node_id)
-        return tic_tac_toe_pb2.ListBoardResponse(board_state=self.board)
+        return tic_tac_toe_pb2.ListBoardResponse(board_state=self.board, board_last_idx=self.board_last_idx, board_last_time=self.board_last_time)
     
     def SetNodeTime(self, request, context):
         self.client.time = request.time
@@ -116,7 +134,7 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
         return tic_tac_toe_pb2.SetNodeTimeResponse(success=1)
     
     def SetTimeOut(self, request, context):
-        self.client.timeout_leader = request.timeout
+        self.client.timeout_leader = request.timeout*60
         self.register_interactions(request.node_id)
         return tic_tac_toe_pb2.SetTimeOutResponse(success=1)
     
