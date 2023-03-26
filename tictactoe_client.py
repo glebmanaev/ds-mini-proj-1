@@ -3,8 +3,6 @@ import grpc
 import tic_tac_toe_pb2
 import tic_tac_toe_pb2_grpc
 
-time_correction = 0
-
 def print_instructions():
     print("Commands:")
     print("  start-game")
@@ -26,6 +24,9 @@ def check_set_node_time_for_me(stub):
     response = stub.GetNodeTime(tic_tac_toe_pb2.GetNodeTimeRequest(node_id=client_id))
     if response.updated:
         time_correction = response.time
+
+def ping(stub):
+
 
 
 def check_winner(stub):
@@ -57,6 +58,8 @@ def main():
     global is_leader, client_id, time_correction
     channel = grpc.insecure_channel("localhost:50051")
     stub = tic_tac_toe_pb2_grpc.TicTacToeStub(channel)
+    if is_leader
+    timeout_for_players, timeout_for_leader = 60, 60
 
     print_instructions()
 
@@ -135,4 +138,5 @@ def main():
 if __name__ == "__main__":
     is_leader = False
     client_id = input("Enter client ID: ")
+    time_correction = 0
     main()
