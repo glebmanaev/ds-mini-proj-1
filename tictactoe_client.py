@@ -3,6 +3,8 @@ import grpc
 import tic_tac_toe_pb2
 import tic_tac_toe_pb2_grpc
 
+time_correction = 0
+
 def print_instructions():
     print("Commands:")
     print("  start-game")
@@ -13,9 +15,18 @@ def print_instructions():
     print("  exit")
 
 def start_game(stub):
+    global time_correction
     client_time = time.time()
-    response = stub.StartGame(tic_tac_toe_pb2.StartGameRequest(client_time=client_time))
+    response = stub.StartGame(tic_tac_toe_pb2.StartGameRequest(client_time=client_time, node_id=client_id))
+    time_correction = time.time() - response.synced_time
     print("Game started.")
+
+def check_set_node_time_for_me(stub):
+    global time_correction
+    response = stub.GetNodeTime(tic_tac_toe_pb2.GetNodeTimeRequest(node_id=client_id))
+    if response.updated:
+        time_correction = response.time
+
 
 def check_winner(stub):
     board = stub.ListBoard(tic_tac_toe_pb2.ListBoardRequest()).board_state
@@ -43,7 +54,7 @@ def check_winner(stub):
     return ""
 
 def main():
-    global is_leader
+    global is_leader, client_id, time_correction
     channel = grpc.insecure_channel("localhost:50051")
     stub = tic_tac_toe_pb2_grpc.TicTacToeStub(channel)
 
@@ -58,7 +69,11 @@ def main():
                 else:
                     print(f"{verdict} wins!")
                 print("Restarting game...")
-                # start_game(stub)
+                start_game(stub)
+        
+        check_set_node_time_for_me(stub)
+
+        # chekc_winner function for not leader
 
         try:
             command = input("\n> ").strip().split()
@@ -67,8 +82,8 @@ def main():
                 continue
 
             if command[0].lower() == "start-game":
-                response = stub.StartGame(tic_tac_toe_pb2.StartGameRequest())
-                print("Game started.")
+                start_game(stub)
+                # is_leader = True
 
             elif command[0].lower() == "set-symbol":
                 cell = int(command[1])
@@ -90,9 +105,14 @@ def main():
 
             elif command[0].lower() == "set-node-time":
                 node_id = command[1]
-                time = command[2]
-                response = stub.SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=node_id, time=time))
-                print(f"Node {node_id} time set to {time}.")
+                settime = command[2]
+                if node_id == client_id:
+                    time_correction = settime
+                elif is_leader:
+                    response = stub.SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=node_id, time=settime))
+                    print(f"Node {node_id} time set to {settime}.")
+                else:
+                    print("Only the leader can set the time of other nodes.")
 
             elif command[0].lower() == "set-time-out":
                 target = command[1]
@@ -114,4 +134,5 @@ def main():
 
 if __name__ == "__main__":
     is_leader = False
+    client_id = input("Enter client ID: ")
     main()
