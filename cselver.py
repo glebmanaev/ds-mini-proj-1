@@ -218,11 +218,13 @@ node_id = int(sys.argv[1])
 channels = ["[::]:20048", "[::]:20049", "[::]:20050"]
 client = TicTacToeNode(channels, node_id)
 
-threading.Thread(target=check_timeout).start()
-threading.Thread(target=run_server(client, channels, node_id)).start()
-#threading.Thread(target=server.wait_for_termination()).start()
+server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+tic_tac_toe_pb2_grpc.add_TicTacToeServicer_to_server(TicTacToeServicer(), server)
+server.add_insecure_port(channels[node_id])
+server.start()
+print("Server started listening on DESIGNATED port")
 
-# run_server(client, channels, node_id)
+threading.Thread(target=check_timeout).start()
 
 while True:
     command = input("\n> ").strip().split()
