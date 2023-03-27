@@ -15,16 +15,14 @@ message StartGameRequest {
   int32 node_id = 1;
 }
 message StartGameResponse {
-  int32 proposed_leader = 1;
-  repeated int32 node_list = 2;
+  int32 node_time = 1;
 }
 
 message LeaderElectionRequest {
-  int32 node_id = 1;
+  int32 proposed_leader = 1;
+  repeated int32 node_list = 2;
 }
-message LeaderElectionResponse {
-  int32 leader_id = 1;
-}
+message LeaderElectionResponse {}
 
 message BerkleyTimeSyncRequest {
   int32 time_correction = 1;
