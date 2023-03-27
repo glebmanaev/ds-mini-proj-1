@@ -1,3 +1,4 @@
+import sys
 import time
 import datetime
 from concurrent import futures
@@ -14,13 +15,13 @@ class TicTacToeNode:
         self.leader = None
         self.timeout_leader = None
         self.timeout_player = None
-        self.node_last_seen_at = [time.time() if i != self.client.id else None for i in range(3)]
+        self.node_last_seen_at = [time.time() if i != self.id else None for i in range(3)]
         self.stubs = []
         for i, channel in enumerate(channels):
             if i == id:
                 self.stubs.append(None)
             else:
-                self.stubs.append(tic_tac_toe_pb2_grpc.TicTacToeStub(channel))
+                self.stubs.append(tic_tac_toe_pb2_grpc.TicTacToeStub(grpc.insecure_channel(channel)))
 
     def register_interactions(self, node_id):
         self.node_last_seen_at[node_id] = time.time() + self.client.time_correction
@@ -97,7 +98,7 @@ class TicTacToeNode:
     
 
 class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
-    def __init__(self, client):
+    def __init__(self):
         self.client = client
         self.time_differneces = {}
 
@@ -189,25 +190,39 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
 
 def check_timeout():
     while True:
-        for i, node in enumerate(client.node_last_seen_at):
-            if node is not None and client.id != client.leader and time.time() - node > client.timeout_leader:
-                node_id = [node_id for node_id in [0,1,2] if node_id not in [client.id, client.leader]][0]
-                response = client.stubs[node_id].CheckTimeout(tic_tac_toe_pb2.CheckTimeoutRequest())
-                if response.leader_dead:
-                    print(f"Leader {client.leader} timed out. Restarting the game")
+        if client.leader is not None:
+            for i, node in enumerate(client.node_last_seen_at):
+                if node is not None and client.id != client.leader and time.time() - node > client.timeout_leader:
+                    node_id = [node_id for node_id in [0,1,2] if node_id not in [client.id, client.leader]][0]
+                    response = client.stubs[node_id].CheckTimeout(tic_tac_toe_pb2.CheckTimeoutRequest())
+                    if response.leader_dead:
+                        print(f"Leader {client.leader} timed out. Restarting the game")
+                        client.start_game()
+                elif node is not None and client.id == client.leader and time.time() - node > client.timeout_player:
+                    print(f"Player {i} timed out. Restarting the game")
                     client.start_game()
-            elif node is not None and client.id == client.leader and time.time() - node > client.timeout_player:
-                print(f"Player {i} timed out. Restarting the game")
-                client.start_game()
 
 
-channels = []
-client = TicTacToeNode(channels, id)
-server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), client=client)
-server.add_insecure_port(channels[id])
-server.start()
-server.wait_for_termination()
+def run_server(client, channels, node_id):
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server.add_insecure_port(channels[node_id])
+    server.start()
+    try:
+        while True:
+            time.sleep(86400)
+    except KeyboardInterrupt:
+        server.stop(0)
+
+node_id = int(sys.argv[1])
+
+channels = ["[::]:20048", "[::]:20049", "[::]:20050"]
+client = TicTacToeNode(channels, node_id)
+
 threading.Thread(target=check_timeout).start()
+threading.Thread(target=run_server(client, channels, node_id)).start()
+#threading.Thread(target=server.wait_for_termination()).start()
+
+# run_server(client, channels, node_id)
 
 while True:
     command = input("\n> ").strip().split()

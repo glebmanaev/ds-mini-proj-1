@@ -1,6 +1,8 @@
 syntax = "proto3";
 
 service TicTacToe {
+  rpc StartGame (StartGameRequest) returns (StartGameResponse) {}
+  rpc LeaderElection (LeaderElectionRequest) returns (LeaderElectionResponse) {}
   rpc BerkleyTimeSync (BerkleyTimeSyncRequest) returns (BerkleyTimeSyncResponse) {}
   rpc SetSymbol (SetSymbolRequest) returns (SetSymbolResponse) {}
   rpc ListBoard (ListBoardRequest) returns (ListBoardResponse) {}
