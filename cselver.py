@@ -10,6 +10,7 @@ class TicTacToeNode:
     def __init__(self, channels, id):
         self.id = id
         self.time_correction = 0
+        self.first_player = False
         self.leader = None
         self.timeout_leader = None
         self.timeout_player = None
@@ -26,8 +27,27 @@ class TicTacToeNode:
 
     def start_game(self):
         # Do Barclay time sync here
-        # Do democracy here
-        return self.stub.StartGame(tic_tac_toe_pb2.StartGameRequest())
+        print(f"Game started. You are player {self.id}.")
+        print("Doing time sync with other nodes...")
+        if self.first_player:
+            node_times = [time.time()]*3
+            for i in range(3):
+                if i != self.id:
+                     response = self.stubs[i].StartGame(tic_tac_toe_pb2.StartGameRequest(node_id=self.id))
+                     node_times[i] = response.node_time
+            self.time_correction = sum(node_times)/3 - node_times[self.id]
+            for i in range(3):
+                if i != self.id:
+                     self.stubs[i].BerkleyTimeSync(tic_tac_toe_pb2.BerkleyTimeSyncRequest(time_correction=sum(node_times)/3 - node_times[i]))
+        print(f"Time sync done. Correction: {self.time_correction} seconds.")
+        
+        # Do leader election here
+        print("Doing leader election...")
+        if self.first_player:
+            self.stubs[(self.id + 1) % 3].LeaderElection(tic_tac_toe_pb2.LeaderElectionRequest(proposed_leader=None, node_list=[self.id]))
+        while self.leader is None:
+            time.sleep(1)
+        print("The leader is", self.client.leader)
 
     def set_symbol(self, cell, symbol):
         # send to leader, it will check if it is correct and returns the success of the move
@@ -79,6 +99,7 @@ class TicTacToeNode:
 class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
     def __init__(self, client):
         self.client = client
+        self.time_differneces = {}
 
     def init_as_leader(self):
         self.board = [""] * 9
@@ -107,6 +128,27 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
             return "draw"
         # No winner yet
         return ""
+    
+    def StartGame(self, request, context):
+        self.client.start_game()
+        return tic_tac_toe_pb2.StartGameResponse(node_time=time.time())
+
+    def BerkleyTimeSync(self, request, context):
+        self.client.time_correction = request.time_correction
+        return tic_tac_toe_pb2.BerkleyTimeSyncResponse()
+    
+    def LeaderElection(self, request, context):
+        if request.proposed_leader is None:
+            proposed_leader = None
+            if self.clinet.first_player:
+                proposed_leader = max(request.node_list)
+            self.client.stubs[(self.client.id + 1) % 3].LeaderElection(tic_tac_toe_pb2.LeaderElectionRequest(proposed_leader=proposed_leader,node_list=request.node_list + [self.client.id]))
+        else:
+            self.client.leader = request.proposed_leader
+            self.client.stubs[(self.client.id + 1) % 3].LeaderElection(tic_tac_toe_pb2.LeaderElectionRequest(proposed_leader=request.proposed_leader,node_list=request.node_list + [self.client.id]))
+            if self.client.leader == self.client.id:
+                self.init_as_leader()
+        return tic_tac_toe_pb2.LeaderElectionResponse()
 
     def SetSymbol(self, request, context):
         if self.board[request.cell - 1] != "":
@@ -168,12 +210,10 @@ server.wait_for_termination()
 threading.Thread(target=check_timeout).start()
 
 while True:
-
     command = input("\n> ").strip().split()
     if command[0] == "start-game":
-        # Needs to be checked after democracy implemented
+        client.first_player = True
         response = client.start_game()
-        print(f"Game started. You are player {response.player_id}.")
 
     elif command[0] == "set-symbol":
         cell = int(command[1])
