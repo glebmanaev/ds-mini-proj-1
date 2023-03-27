@@ -32,7 +32,7 @@ message BerkleyTimeSyncResponse {
 
 message SetSymbolRequest {
   int32 cell = 1;
-  string symbol = 2;
+  int32 symbol = 2;
   int32 node_id = 3;
 }
 message SetSymbolResponse {

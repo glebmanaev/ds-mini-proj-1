@@ -54,10 +54,13 @@ class TicTacToeNode:
         while self.leader == -1:
             time.sleep(1)
         print("The leader is", self.leader)
+        if self.leader != self.id:
+            main()
 
     def set_symbol(self, cell, symbol):
         # send to leader, it will check if it is correct and returns the success of the move
         while True:
+            symbol = {'X': 1, 'O': 0}[symbol]
             response = self.stubs[self.leader].SetSymbol(tic_tac_toe_pb2.SetSymbolRequest(cell=cell, symbol=symbol, node_id=self.id))
             self.register_interactions(self.leader)
             if not bool(response.success):
@@ -72,7 +75,7 @@ class TicTacToeNode:
     def list_board(self):
         response =  self.stubs[self.leader].ListBoard(tic_tac_toe_pb2.ListBoardRequest(node_id=self.id))
         self.register_interactions(self.leader)
-        board = [ list(response.board_state)]
+        board = [['O','X'][j] for j in list(response.board_state)]
         timestamp = datetime.datetime.fromtimestamp(response.board_last_time).strftime('%H:%M:%S')
         board[response.board_last_idx] = f"{board[response.board_last_idx]}: {timestamp}"
         print("Board state: ", board)
