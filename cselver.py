@@ -6,6 +6,7 @@ import grpc
 import tic_tac_toe_pb2
 import tic_tac_toe_pb2_grpc
 import threading
+from datetime import datetime
 
 class TicTacToeNode:
     def __init__(self, channels, id):
@@ -18,9 +19,6 @@ class TicTacToeNode:
         self.node_last_seen_at = [int(time.time()) if i != self.id else None for i in range(3)]
         self.stubs = []
         for i, channel in enumerate(channels):
-            #if i == id:
-            #    self.stubs.append(None)
-            #else:
                 self.stubs.append(tic_tac_toe_pb2_grpc.TicTacToeStub(grpc.insecure_channel(channel)))
 
     def register_interactions(self, node_id):
@@ -54,8 +52,6 @@ class TicTacToeNode:
         while self.leader == -1:
             time.sleep(1)
         print("The leader is", self.leader)
-        if self.leader != self.id:
-            main()
 
     def set_symbol(self, cell, symbol):
         # send to leader, it will check if it is correct and returns the success of the move
@@ -66,8 +62,8 @@ class TicTacToeNode:
             if not bool(response.success):
                 print("Cell already taken. Try again.")
                 command = input("\n> Set-symbol ").strip().split()
-                cell = int(command[1])
-                symbol = command[2]
+                cell = int(command[0])
+                symbol = command[1]
             else:
                 break
         print("Symbol set.")
@@ -75,18 +71,18 @@ class TicTacToeNode:
     def list_board(self):
         response =  self.stubs[self.leader].ListBoard(tic_tac_toe_pb2.ListBoardRequest(node_id=self.id))
         self.register_interactions(self.leader)
-        board = [['O','X'][j] for j in list(response.board_state)]
-        timestamp = datetime.datetime.fromtimestamp(response.board_last_time).strftime('%H:%M:%S')
+        board = [['O','X','_'][j] for j in list(response.board_state)]
+        timestamp = datetime.fromtimestamp(response.board_last_time).strftime('%H:%M:%S')
         board[response.board_last_idx] = f"{board[response.board_last_idx]}: {timestamp}"
         print("Board state: ", board)
 
     def set_node_time(self, node_id, settime):
         dt = datetime.combine(datetime.today(), datetime.strptime(settime, '%H:%M:%S').time())
-        settime = dt.timestamp() # could be a problem if the node is not in the same timezone
-        if node_id == self.id:
-            self.time = settime
+        settimes = dt.timestamp()
+        if node_id == self.id:     
+            self.time = settimes
         elif self.leader == self.id:
-            response = self.stubs[node_id].SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=self.id, time=settime))
+            self.stubs[node_id].SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=self.id, time=int(settimes)))
             self.register_interactions(node_id)
             print(f"Node {node_id} time set to {settime}.")
         else:
@@ -96,6 +92,7 @@ class TicTacToeNode:
         if self.leader == self.id:
             if target == "players":
                 self.timeout_player = timeout_minutes * 60
+                print(f'New timeout for players: {timeout_minutes} minutes.')
             else:
                 for i, stub in enumerate(self.stubs):
                     if i != self.id:
@@ -110,7 +107,7 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
         self.client = client
 
     def init_as_leader(self):
-        self.board = [""] * 9
+        self.board = [-1] * 9
         self.board_last_idx = None
         self.board_last_time = None
 
@@ -120,19 +117,19 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
     def check_winner(self):
         # Check for horizontal wins
         for i in range(0, 9, 3):
-            if self.board[i] == self.board[i + 1] == self.board[i + 2] != "":
+            if self.board[i] == self.board[i + 1] == self.board[i + 2] != -1:
                 return self.board[i]
         # Check for vertical wins
         for i in range(3):
-            if self.board[i] == self.board[i + 3] == self.board[i + 6] != "":
+            if self.board[i] == self.board[i + 3] == self.board[i + 6] != -1:
                 return self.board[i]
         # Check for diagonal wins
-        if self.board[0] == self.board[4] == self.board[8] != "":
+        if self.board[0] == self.board[4] == self.board[8] != -1:
             return self.board[0]
-        if self.board[2] == self.board[4] == self.board[6] != "":
+        if self.board[2] == self.board[4] == self.board[6] != -1:
             return self.board[2]
         # Check for draw
-        if "" not in self.board:
+        if -1 not in self.board:
             return "draw"
         # No winner yet
         return ""
@@ -164,7 +161,7 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
         return tic_tac_toe_pb2.LeaderElectionResponse()
 
     def SetSymbol(self, request, context):
-        if self.board[request.cell - 1] != "":
+        if self.board[request.cell - 1] != -1:
             self.register_interactions(request.node_id)
             return tic_tac_toe_pb2.SetSymbolResponse(success=0)
         self.board[request.cell - 1] = request.symbol
@@ -189,6 +186,7 @@ class TicTacToeServicer(tic_tac_toe_pb2_grpc.TicTacToeServicer):
         return tic_tac_toe_pb2.SetNodeTimeResponse(success=1)
     
     def SetTimeOut(self, request, context):
+        print(f"New timeout for master: {request.timeout} minutes.")
         self.client.timeout_leader = request.timeout*60
         self.register_interactions(request.node_id)
         return tic_tac_toe_pb2.SetTimeOutResponse(success=1)
@@ -216,27 +214,7 @@ def check_timeout():
                     client.start_game()
 
 
-def run_server(client, channels, node_id):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    server.add_insecure_port(channels[node_id])
-    server.start()
 
-node_id = int(sys.argv[1])
-
-channels = ["localhost:20048", "localhost:20049", "localhost:20050"]
-client = TicTacToeNode(channels, node_id)
-
-server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-tic_tac_toe_pb2_grpc.add_TicTacToeServicer_to_server(TicTacToeServicer(client), server)
-server.add_insecure_port(channels[node_id])
-server.start()
-print(f"Server started listening to {channels[node_id]}")
-
-# threading.Thread(target=check_timeout).start()
-
-#client.stubs[client.id].SetNodeTime(tic_tac_toe_pb2.SetNodeTimeRequest(node_id=client.id, time=0))
-
-#'''
 def main():
     while True:
         command = input("\n> ").strip().split()
@@ -250,12 +228,11 @@ def main():
             client.set_symbol(cell, symbol)
 
         elif command[0] == "list-board":
-            response = client.list_board()
-            print(response.board_state)
+            client.list_board()
 
         elif command[0] == "set-node-time":
             node_id = int(command[1])
-            settime = int(command[2])
+            settime = command[2]
             client.set_node_time(node_id, settime)
 
         elif command[0] == "set-timeout":
@@ -268,6 +245,16 @@ def main():
         else:
             print("Unknown command.")
         
-#'''
 
+
+node_id = int(sys.argv[1])
+
+channels = ["localhost:20048", "localhost:20049", "localhost:20050"]
+client = TicTacToeNode(channels, node_id)
+
+server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+tic_tac_toe_pb2_grpc.add_TicTacToeServicer_to_server(TicTacToeServicer(client), server)
+server.add_insecure_port(channels[node_id])
+server.start()
+print(f"Server started listening to {channels[node_id]}")
 main()
